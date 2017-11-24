@@ -120,6 +120,12 @@ class NeuralNetwork(object):
             else:
                 raise KeyError('Unknow pooling kernel %s'%ptype_nn)
 
+    @layers
+    def dropout(self, input_nn, keep_prob, name):
+        with tf.variable_scope(name):
+            output = tf.nn.dropout(input_nn, keep_prob=keep_prob)
+            return output
+
 class mnist_nn(NeuralNetwork):
     def setup(self):
         (self.feed('data')
@@ -129,8 +135,10 @@ class mnist_nn(NeuralNetwork):
          .conv(5, 5, 1, 1, 64, name='conv2')
          .activate(name='relu2', atype_nn='relu')
          .pool(2, 2, 2, 2, name='pool2')
+         # .dropout(keep_prob=0.5, name='drop1')
          .fc(1024, name='fc1')
          .activate(name='relu3', atype_nn='relu')
+         .dropout(keep_prob=0.5, name='drop2')
          .fc(10, name='fc2')
          )
 
@@ -153,17 +161,19 @@ sess = tf.InteractiveSession()
 # logits = ('mnist/fc2/fc2:0')
 data = tf.reshape(x, [-1, 28, 28, 1])
 logits = mnist_nn({'data': data}).logits
+# logits = mnist_nn({'data': data}).layers['fc2']
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits))
-train_op = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
+# train_op = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
+train_op = tf.train.AdamOptimizer(0.001).minimize(loss)
 init = tf.global_variables_initializer()
 sess.run(init)
-for i in range(1, 1000):
+for i in range(1, 1501):
     batch = mnist.train.next_batch(100)
     # sess.run(train_op, {x: batch[0], y: batch[1]})
     sess.run(train_op, feed_dict={x: batch[0], y: batch[1]})
     if i%100 == 0:
         print("%d iterations-loss : %r"%(i, sess.run(loss, feed_dict={x: batch[0], y: batch[1]})))
-
-corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
-accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
-print("The final accuracy on test is %r"%sess.run(accuracy, feed_dict={x: mnist.test.images[0:1000], y: mnist.test.labels[0:1000]}))
+        for i in range(1, 10):
+            corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
+            accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+            print("The final accuracy on test is %r"%sess.run(accuracy, feed_dict={x: mnist.test.images[i*1000:(i+1)*1000-1], y: mnist.test.labels[i*1000:(i+1)*1000-1]}))
