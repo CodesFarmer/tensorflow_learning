@@ -61,7 +61,10 @@ class NeuralNetwork(object):
             self.terminals.append(arg)
         return self
     def make_variable(self, name, shape):
-        return tf.get_variable(name=name, shape=shape, dtype=tf.float32, initializer=tf.random_normal_initializer)
+        # tf.truncated_normal_initializer
+        initialization = tf.truncated_normal(shape=shape, stddev=0.1, dtype=tf.float32)
+        return tf.get_variable(name=name, initializer=initialization)
+        # return tf.get_variable(name=name, shape=shape, initializer=tf.truncated_normal_initializer)
     @layers
     def conv(self, input_nn, k_h, k_w, s_h, s_w, channels, name, padding='VALID'):
         #get the input depth
@@ -129,10 +132,10 @@ class NeuralNetwork(object):
 class mnist_nn(NeuralNetwork):
     def setup(self):
         (self.feed('data')
-         .conv(5, 5, 1, 1, 32, name='conv1')
+         .conv(5, 5, 1, 1, 32, name='conv1', padding='SAME')
          .activate(name='relu1', atype_nn='relu')
          .pool(2, 2, 2, 2, name='pool1')
-         .conv(5, 5, 1, 1, 64, name='conv2')
+         .conv(5, 5, 1, 1, 64, name='conv2', padding='SAME')
          .activate(name='relu2', atype_nn='relu')
          .pool(2, 2, 2, 2, name='pool2')
          # .dropout(keep_prob=0.5, name='drop1')
@@ -156,24 +159,33 @@ class mnist_nn(NeuralNetwork):
 print('Let\'s flying~')
 x = tf.placeholder(dtype=tf.float32, shape=[None, 784])
 y = tf.placeholder(dtype=tf.float32, shape=[None, 10])
-sess = tf.InteractiveSession()
+sess = tf.Session()
 # mnist_cnn = create_cnn(sess)
 # logits = ('mnist/fc2/fc2:0')
 data = tf.reshape(x, [-1, 28, 28, 1])
 logits = mnist_nn({'data': data}).logits
 # logits = mnist_nn({'data': data}).layers['fc2']
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits))
-# train_op = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
-train_op = tf.train.AdamOptimizer(0.001).minimize(loss)
+train_op = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
+# train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
 init = tf.global_variables_initializer()
 sess.run(init)
-for i in range(1, 1501):
-    batch = mnist.train.next_batch(100)
+for i in range(1, 10000):
+    batch = mnist.train.next_batch(50)
     # sess.run(train_op, {x: batch[0], y: batch[1]})
     sess.run(train_op, feed_dict={x: batch[0], y: batch[1]})
     if i%100 == 0:
         print("%d iterations-loss : %r"%(i, sess.run(loss, feed_dict={x: batch[0], y: batch[1]})))
-        for i in range(1, 10):
-            corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
-            accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
-            print("The final accuracy on test is %r"%sess.run(accuracy, feed_dict={x: mnist.test.images[i*1000:(i+1)*1000-1], y: mnist.test.labels[i*1000:(i+1)*1000-1]}))
+        corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
+        accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+        print("TEST: The final accuracy on test is %r" % sess.run(accuracy, feed_dict={
+            x: mnist.test.images[0:5000, :], y: mnist.test.labels[0:5000, :]}))
+
+'''
+There are some experience:
+1, Do not set the learning rate of Adam too high, otherwise it will become unconvergent
+2, The proper initialization will help to optimize the neural network,
+    do not just set the initializer = tf.truncated_normal_initializer,
+     instead, you should set initializer=tf.truncated_normal(shape=shape, stddev=0.1, dtype=tf.float32)
+3, The input data is important for you to realize your network, please make sure it is valid before feed into network
+'''
