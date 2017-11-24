@@ -72,7 +72,7 @@ class NeuralNetwork(object):
         #clear the intermediate at first
         self.intermediate = []
         #get the shape of input data
-        data_container = tf.zeros()
+        data_container = []
         for arg in args:
             #get the layer name
             if isinstance(arg, string_types):
@@ -81,7 +81,18 @@ class NeuralNetwork(object):
                 except:
                     raise KeyError('Unknow layer name %s'%arg)
             if operation.lower() == 'concat':
-                data_container = tf.concat(data_container, layer_out_data, 0)
+                if data_container == []:
+                    data_container = layer_out_data
+                else:
+                    data_container = tf.concat([data_container, layer_out_data], 3)
             elif operation.lower() == 'add':
-                data_container = data_container + layer_out_data
-                #
+                if data_container == []:
+                    data_container = tf.zeros(shape=layer_out_data.get_shape(), dtype=tf.float32)
+                elif data_container.get_shape() != layer_out_data.get_shape():
+                    raise RuntimeError('The shape of layer %s does not equal to the others'%arg)
+                #If those two layers have same dimension, we add it
+                data_container = tf.add(data_container, layer_out_data)
+        self.intermediate = data_container
+        return self
+
+    # def conv(self, ):
