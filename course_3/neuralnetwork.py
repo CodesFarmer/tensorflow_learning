@@ -88,7 +88,7 @@ class NeuralNetwork(object):
         :param args: the corresponding input
         :return:
         '''
-        assert len(args) == 0
+        assert len(args) != 0
         #clear the intermediate at first
         self.intermediate = []
         #get the shape of input data
@@ -134,36 +134,52 @@ class NeuralNetwork(object):
         #define the convolutional layer
         convolue = lambda x, kernel: tf.nn.conv2d(x, kernel, [1, 1, 1, 1], padding='SAME')
         #This is a block of resnet, which is consist of three convolutional layers
-        in_channels = input_nn.get_shape()[-1]
+        in_channels = int(input_nn.get_shape()[-1])
+        assert in_channels == out_channels_3
         short_cut = input_nn
-        input_nn = self.batch_norm(input_nn, name='bn', is_training=is_training)
+        input_nn = self.batch_norm(input_nn, name='%s_bn'%name, is_training=is_training)
         with tf.variable_scope(name):
             #First layer, which is 1x1 convolution
-            weight_1 = self.make_variables(name='weight_1', shape=[in_channels, 1, 1, out_channels_1], initializer=initializer)
+            weight_1 = self.make_variables(name='weight_1', shape=[1, 1, in_channels, out_channels_1], initializer=initializer)
             bias_1 = self.make_variables(name='bias_1', shape=[out_channels_1])
             output_1 = tf.add(convolue(input_nn, weight_1), bias_1)
             output_1 = self.batch_norm(output_1, name='bn_1', is_training=is_training)
-            output_1 = self.activate(output_1, name='actv_1', activation=activation)
+            output_1 = self.activate_intra(output_1, name='actv_1', activation=activation)
             #Second layer, which is 3x3 convolution
-            weight_2 = self.make_variables(name='weight_2', shape=[out_channels_1, 3, 3, out_channels_2], initializer=initializer)
+            weight_2 = self.make_variables(name='weight_2', shape=[3, 3, out_channels_1, out_channels_2], initializer=initializer)
             bias_2 = self.make_variables(name='bias_2', shape=[out_channels_2])
             output_2 = tf.add(convolue(output_1, weight_2), bias_2)
             output_2 = self.batch_norm(output_2, name='bn_2', is_training=is_training)
-            output_2 = self.activate(output_2, name='actv_2', activation=activation)
+            output_2 = self.activate_intra(output_2, name='actv_2', activation=activation)
             #Third layer, which is 1x1 convolution
-            weight_3 = self.make_variables(name='weight_3', shape=[out_channels_2, 1, 1, out_channels_3], initializer=initializer)
+            weight_3 = self.make_variables(name='weight_3', shape=[1, 1, out_channels_2, out_channels_3], initializer=initializer)
             bias_3 = self.make_variables(name='bias_3', shape=[out_channels_3])
             output_3 = tf.add(convolue(output_2, weight_3), bias_3)
             output_3 = self.batch_norm(output_3, name='bn_3', is_training=is_training)
-            return self.activate(tf.add(short_cut, output_3), name='actv', activation=activation)
+            return self.activate_intra(tf.add(short_cut, output_3), name='actv', activation=activation)
 
-    @layers
     def batch_norm(self, input_nn, name, is_training=True):
         with tf.variable_scope(name):
             output = tf.layers.batch_normalization(inputs=input_nn, axis=3,
                                                    momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON,
-                                                   center=True, scale=True, training=is_training, fused=True)
+                                                   center=True, scale=True, training=is_training, name=name, reuse=False, fused=True)
             return output
+    #Activating function
+    def activate_intra(self, input_nn, name, activation='PReLU'):
+        with tf.variable_scope(name) as scope:
+            if activation.lower() == 'relu':
+                output = tf.nn.relu(input_nn, name=scope.name)
+                return output
+            elif activation.lower() == 'sigmoid':
+                output = tf.nn.sigmoid(input_nn, name=scope.name)
+                return output
+            elif activation.lower() == 'prelu':
+                i = int(input.get_shape()[-1])
+                alpha = self.make_variable('alpha', shape=(i,))
+                output = tf.nn.relu(input_nn) + tf.multiply(alpha, -tf.nn.relu(-input_nn))
+                return output
+            else:
+                raise RuntimeError('Unknow activations: %s'%activation)
     #Activating function
     @layers
     def activate(self, input_nn, name, activation='PReLU'):
