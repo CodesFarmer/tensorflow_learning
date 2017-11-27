@@ -129,36 +129,73 @@ class NeuralNetwork(object):
             output = tf.add(output, bias)
             return output
     @layers
-    def bottleneck_block(self, input_nn, out_channels_1, out_channels_2, out_channels_3, name, is_training=True,
+    def bottleneck_block(self, input_nn, out_channels, name,
                          initializer='GAUSSIAN', activation='ReLU'):
         #define the convolutional layer
         convolue = lambda x, kernel: tf.nn.conv2d(x, kernel, [1, 1, 1, 1], padding='SAME')
         #This is a block of resnet, which is consist of three convolutional layers
         in_channels = int(input_nn.get_shape()[-1])
-        assert in_channels == out_channels_3
+        assert in_channels == out_channels*4
         short_cut = input_nn
-        input_nn = self.batch_norm(input_nn, name='%s_bn'%name, is_training=is_training)
+        input_nn = self.batch_norm_intra(input_nn, name='%s_bn'%name, is_training=self.training)
         with tf.variable_scope(name):
             #First layer, which is 1x1 convolution
-            weight_1 = self.make_variables(name='weight_1', shape=[1, 1, in_channels, out_channels_1], initializer=initializer)
-            bias_1 = self.make_variables(name='bias_1', shape=[out_channels_1])
+            weight_1 = self.make_variables(name='weight_1', shape=[1, 1, in_channels, out_channels], initializer=initializer)
+            bias_1 = self.make_variables(name='bias_1', shape=[out_channels])
             output_1 = tf.add(convolue(input_nn, weight_1), bias_1)
-            output_1 = self.batch_norm(output_1, name='bn_1', is_training=is_training)
+            output_1 = self.batch_norm_intra(output_1, name='bn_1', is_training=self.training)
             output_1 = self.activate_intra(output_1, name='actv_1', activation=activation)
             #Second layer, which is 3x3 convolution
-            weight_2 = self.make_variables(name='weight_2', shape=[3, 3, out_channels_1, out_channels_2], initializer=initializer)
-            bias_2 = self.make_variables(name='bias_2', shape=[out_channels_2])
+            weight_2 = self.make_variables(name='weight_2', shape=[3, 3, out_channels, out_channels], initializer=initializer)
+            bias_2 = self.make_variables(name='bias_2', shape=[out_channels])
             output_2 = tf.add(convolue(output_1, weight_2), bias_2)
-            output_2 = self.batch_norm(output_2, name='bn_2', is_training=is_training)
+            output_2 = self.batch_norm_intra(output_2, name='bn_2', is_training=self.training)
             output_2 = self.activate_intra(output_2, name='actv_2', activation=activation)
             #Third layer, which is 1x1 convolution
-            weight_3 = self.make_variables(name='weight_3', shape=[1, 1, out_channels_2, out_channels_3], initializer=initializer)
-            bias_3 = self.make_variables(name='bias_3', shape=[out_channels_3])
+            weight_3 = self.make_variables(name='weight_3', shape=[1, 1, out_channels, out_channels*4], initializer=initializer)
+            bias_3 = self.make_variables(name='bias_3', shape=[out_channels*4])
             output_3 = tf.add(convolue(output_2, weight_3), bias_3)
-            output_3 = self.batch_norm(output_3, name='bn_3', is_training=is_training)
+            output_3 = self.batch_norm_intra(output_3, name='bn_3', is_training=self.training)
             return self.activate_intra(tf.add(short_cut, output_3), name='actv', activation=activation)
 
+    @layers
+    def building_block(self, input_nn, out_channels, strides, conv_shortcut, name,
+                       initializer='GAUSSIAN', activation='ReLU'):
+        #get the depth of input
+        in_channels = int(input_nn.get_shape()[-1])
+        #for such a block, we building it in BN -> C -> BN -> C
+        convolue_down = lambda x, kernel: tf.nn.conv2d(x, kernel, [1, strides, strides, 1], padding='SAME')
+        convolue_transition = lambda x, kernel: tf.nn.conv2d(x, kernel, [1, 1, 1, 1], padding='SAME')
+        short_cut = input_nn
+        input_nn = self.batch_norm_intra(input_nn, name='%s_bn'%name, is_training=self.training)
+        input_nn = self.activate_intra(input_nn, name='%s_actv'%name, activation=activation)
+        with tf.variable_scope(name):
+            if conv_shortcut:
+                weight_br1 = self.make_variables(name='weight_br1', shape=[1, 1, in_channels, out_channels], initializer=initializer)
+                bias_br1 = self.make_variables(name='bias_br1', shape=[out_channels], initializer=initializer)
+                short_cut = convolue_down(input_nn, weight_br1)
+                short_cut = tf.add(short_cut, bias_br1)
+            #First convolution layer
+            weight_1 = self.make_variables(name='weight_1', shape=[3, 3, in_channels, out_channels], initializer=initializer)
+            bias_1 = self.make_variables(name='bias_1', shape=[out_channels])
+            input_nn = tf.add(convolue_down(input_nn, weight_1), bias_1)
+            input_nn = self.batch_norm_intra(input_nn, name='bn_1', is_training=self.training)
+            input_nn = self.activate_intra(input_nn, name='actv_1', activation=activation)
+            #Second convolution layer
+            weight_2 = self.make_variables(name='weight_2', shape=[3, 3, out_channels, out_channels], initializer=initializer)
+            bias_2 = self.make_variables(name='bias_2', shape=[out_channels], initializer=initializer)
+            input_nn = tf.add(convolue_transition(input_nn, weight_2), bias_2)
+            output = tf.add(input_nn, short_cut)
+            return output
+    @layers
     def batch_norm(self, input_nn, name, is_training=True):
+        with tf.variable_scope(name):
+            output = tf.layers.batch_normalization(inputs=input_nn, axis=3,
+                                                   momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON,
+                                                   center=True, scale=True, training=is_training, name=name, reuse=False, fused=True)
+            return output
+
+    def batch_norm_intra(self, input_nn, name, is_training=True):
         with tf.variable_scope(name):
             output = tf.layers.batch_normalization(inputs=input_nn, axis=3,
                                                    momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON,
@@ -231,4 +268,10 @@ class NeuralNetwork(object):
     def dropout(self, input_nn, keep_prob, name):
         with tf.variable_scope(name):
             output = tf.nn.dropout(input_nn, keep_prob=keep_prob)
+            return output
+    #Define a layer named reshape
+    @layers
+    def reshape(self, input_nn, shape, name):
+        with tf.variable_scope(name):
+            output = tf.reshape(input_nn, shape=shape, name=name)
             return output

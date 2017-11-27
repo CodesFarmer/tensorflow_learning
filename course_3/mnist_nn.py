@@ -10,9 +10,9 @@ class mnist_nn(neuralnetwork.NeuralNetwork):
          .conv(5, 5, 1, 1, 32, name='conv1', padding='SAME')
          .activate(name='relu1', activation='relu')
          .pool(2, 2, 2, 2, name='pool1')
-         .bottleneck_block(16, 16, 32, name='res1a', is_training=True)
-         .bottleneck_block(16, 16, 32, name='res2a', is_training=True)
-         .bottleneck_block(16, 16, 32, name='res3a', is_training=True)
+         .bottleneck_block(8, name='res1a')
+         .bottleneck_block(8, name='res2a')
+         .bottleneck_block(8, name='res3a')
          # .activate(name='relu2', activation='relu')
          .pool(2, 2, 2, 2, name='pool2')
          .fc(1024, name='fc1')
@@ -25,6 +25,7 @@ y = tf.placeholder(dtype=tf.float32, shape=[None, 10])
 is_training = tf.placeholder(dtype=tf.bool)
 data = tf.reshape(x, [-1, 28, 28, 1])
 logits = mnist_nn({'data':data}).layers['fc2']
+mnist_nn.training = is_training
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits))
 # optimizer = tf.train.GradientDescentOptimizer(0.1)
 optimizer = tf.train.AdamOptimizer(0.0001)
@@ -39,7 +40,7 @@ for i in range(1, 10001):
     train_batch = mnist.train.next_batch(128)
     sess.run(train_op, {x:train_batch[0], y: train_batch[1], is_training: True})
     if i%500 == 0:
-        print('The loss is %f'%sess.run(loss, {x:train_batch[0], y: train_batch[1]}))
+        print('The loss is %f'%sess.run(loss, {x:train_batch[0], y: train_batch[1], is_training: True}))
     if i%500 == 0:
         # print('Accuracy : %f'%sess.run(accuracy, {x:mnist.test.images[1:5000, :], y: mnist.test.labels[1:5000, :]}))
         print('Accuracy : %f'%sess.run(accuracy, {x:mnist.test.images, y: mnist.test.labels, is_training: False}))
