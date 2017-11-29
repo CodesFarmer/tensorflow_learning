@@ -1,3 +1,6 @@
+'''
+In this file, we restore the model trained before
+'''
 from six import string_types, iteritems
 import tensorflow as tf
 import numpy as np
@@ -145,16 +148,8 @@ class mnist_nn(NeuralNetwork):
          .fc(10, name='fc2')
          )
 
-# def create_cnn(sess):
-#     with tf.variable_scope('mnist'):
-#         input_x = tf.placeholder(dtype=tf.float32, shape=[None, 784], name='input')
-#         data = tf.reshape(input_x, [-1, 28, 28, 1])
-#         #{'data':data} is a kwargs, the keyword is 'data'
-#         # the corresponding variable is stored in data
-#         mnist_nn({'data': data})
-#     mnist_fun = lambda imgs : sess.run(('mnist/fc2/fc2:0'), feed_dict={'mnist/input:0': imgs})
-#     return mnist_fun
 
+#Here we start to restore the model
 #defien the loss
 print('Let\'s flying~')
 x = tf.placeholder(dtype=tf.float32, shape=[None, 784])
@@ -165,30 +160,17 @@ sess = tf.Session()
 data = tf.reshape(x, [-1, 28, 28, 1])
 logits = mnist_nn({'data': data}).logits
 # logits = mnist_nn({'data': data}).layers['fc2']
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits))
-train_op = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
+# loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=logits))
+# train_op = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
 # train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
 init = tf.global_variables_initializer()
 sess.run(init)
 saver = tf.train.Saver()
-for i in range(1, 10000):
-    batch = mnist.train.next_batch(50)
-    # sess.run(train_op, {x: batch[0], y: batch[1]})
-    sess.run(train_op, feed_dict={x: batch[0], y: batch[1]})
-    if i%100 == 0:
-        print("%d iterations-loss : %r"%(i, sess.run(loss, feed_dict={x: batch[0], y: batch[1]})))
-        corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
-        accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
-        print("TEST: The final accuracy on test is %r" % sess.run(accuracy, feed_dict={
-            x: mnist.test.images[0:5000, :], y: mnist.test.labels[0:5000, :]}))
-    if i%2000 == 0:
-        saver.save(sess, './model/mnist_l4_%d.ckpt'%i)
 
-'''
-There are some experience:
-1, Do not set the learning rate of Adam too high, otherwise it will become unconvergent
-2, The proper initialization will help to optimize the neural network,
-    do not just set the initializer = tf.truncated_normal_initializer,
-     instead, you should set initializer=tf.truncated_normal(shape=shape, stddev=0.1, dtype=tf.float32)
-3, The input data is important for you to realize your network, please make sure it is valid before feed into network
-'''
+corrections = tf.equal(tf.argmax(y, 1), tf.argmax(logits, 1))
+accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+saver.restore(sess, 'model/mnist_l4_800.ckpt')
+for i in range(1, 10):
+
+    print("TEST: The final accuracy on test is %r" % sess.run(accuracy, feed_dict={
+        x: mnist.test.images, y: mnist.test.labels}))

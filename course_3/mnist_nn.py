@@ -35,6 +35,7 @@ correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 init = tf.global_variables_initializer()
 sess.run(init)
+saver = tf.train.Saver()
 
 for i in range(1, 10001):
     train_batch = mnist.train.next_batch(128)
@@ -44,3 +45,5 @@ for i in range(1, 10001):
     if i%500 == 0:
         # print('Accuracy : %f'%sess.run(accuracy, {x:mnist.test.images[1:5000, :], y: mnist.test.labels[1:5000, :]}))
         print('Accuracy : %f'%sess.run(accuracy, {x:mnist.test.images, y: mnist.test.labels, is_training: False}))
+    if i%2000 == 0:
+        saver.save(sess, './model/mnist_%d.ckpt'%i)
