@@ -228,8 +228,8 @@ class NeuralNetwork(object):
                 output = tf.nn.sigmoid(input_nn, name=scope.name)
                 return output
             elif activation.lower() == 'prelu':
-                i = int(input.get_shape()[-1])
-                alpha = self.make_variable('alpha', shape=(i,))
+                i = int(input_nn.get_shape()[-1])
+                alpha = self.make_variables('alpha', shape=(i,))
                 output = tf.nn.relu(input_nn) + tf.multiply(alpha, -tf.nn.relu(-input_nn))
                 return output
             else:
